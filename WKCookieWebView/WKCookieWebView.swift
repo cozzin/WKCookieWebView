@@ -60,26 +60,32 @@ open class WKCookieWebView: WKWebView {
     private func userContentWithCookies(_ url: URL) -> WKUserContentController {
         let userContentController = configuration.userContentController
         
-        if let cookies = HTTPCookieStorage.shared.cookies(for: url), cookies.count > 0 {
+        if let cookies = HTTPCookieStorage.shared.cookies(for: url), cookies.isEmpty == false {
             
-            // https://stackoverflow.com/a/32845148
-            var scripts: [String] = ["var cookieNames = document.cookie.split('; ').map(function(cookie) { return cookie.split('=')[0] } )"]
-            let now = Date()
-
-            for cookie in cookies {
-                if let expiresDate = cookie.expiresDate, now.compare(expiresDate) == .orderedDescending {
-                    // Expire
-                    delete(cookie: cookie)
-                    continue
+            if #available(iOS 11.0, *) {
+                cookies.forEach {
+                    configuration.websiteDataStore.httpCookieStore.setCookie($0, completionHandler: nil)
+                }
+            } else {
+                // https://stackoverflow.com/a/32845148
+                var scripts: [String] = ["var cookieNames = document.cookie.split('; ').map(function(cookie) { return cookie.split('=')[0] } )"]
+                let now = Date()
+                
+                for cookie in cookies {
+                    if let expiresDate = cookie.expiresDate, now.compare(expiresDate) == .orderedDescending {
+                        // Expire
+                        delete(cookie: cookie)
+                        continue
+                    }
+                    
+                    scripts.append("if (cookieNames.indexOf('\(cookie.name)') == -1) { document.cookie='\(cookie.javaScriptString)'; }")
                 }
                 
-                scripts.append("if (cookieNames.indexOf('\(cookie.name)') == -1) { document.cookie='\(cookie.javaScriptString)'; }")
+                let mainScript = scripts.joined(separator: ";\n")
+                userContentController.addUserScript(WKUserScript(source: mainScript,
+                                                                 injectionTime: .atDocumentStart,
+                                                                 forMainFrameOnly: false))
             }
-            
-            let mainScript = scripts.joined(separator: ";\n")
-            userContentController.addUserScript(WKUserScript(source: mainScript,
-                                                             injectionTime: .atDocumentStart,
-                                                             forMainFrameOnly: false))
         }
         
         return userContentController
@@ -98,7 +104,10 @@ open class WKCookieWebView: WKWebView {
         let httpCookies = HTTPCookieStorage.shared.cookies(for: url)
         
         configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] (cookies) in
-            let wkCookies = cookies.filter { host.range(of: $0.domain) != nil || $0.domain.range(of: host) != nil }
+            let wkCookies = cookies
+                .filter { host.range(of: $0.domain) != nil || $0.domain.range(of: host) != nil }
+                .filter { $0.expiresDate == nil || $0.expiresDate! >= Date() }
+            
             for wkCookie in wkCookies {
                 httpCookies?
                     .filter { $0.name == wkCookie.name }
