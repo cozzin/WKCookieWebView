@@ -23,14 +23,15 @@ class ViewController: UIViewController {
         super.viewDidLoad()
         // Do any additional setup after loading the view, typically from a nib.
         
-        let urlString = "http://cozzin.github.io/Bakery/cookie"
+        let urlString = "https://cozzin.github.io/Bakery/cookie"
         let isNeedPreloadForCookieSync = false
         
         let cookie = HTTPCookie(properties: [
             .domain: ".cozzin.github.io",
             .path: "/",
             .name: "key",
-            .value: "value!!"])!
+            .value: "value!!",
+            .secure: true])!
         
         HTTPCookieStorage.shared.setCookie(cookie)
                 
@@ -41,11 +42,11 @@ class ViewController: UIViewController {
             // You can use the webview.
             WKCookieWebView.preloadWithDomainForCookieSync(urlString: urlString) { [weak self] in
                 self?.setupWebView()
-                self?.webView.load(URLRequest(url: URL(string: urlString)!))
+                self?.load(urlString)
             }
         } else {
             setupWebView()
-            webView.load(URLRequest(url: URL(string: urlString)!))
+            load(urlString)
         }
     }
     
@@ -68,6 +69,14 @@ class ViewController: UIViewController {
         
         webView.onUpdateCookieStorage = { [weak self] (webView) in
             self?.printCookie()
+        }
+    }
+    
+    private func load(_ urlString: String) {
+        if #available(iOS 11.0, *) {
+            webView.loadAfterInjectCookies(URLRequest(url: URL(string: urlString)!))
+        } else {
+            webView.load(URLRequest(url: URL(string: urlString)!))
         }
     }
     

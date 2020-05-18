@@ -33,6 +33,8 @@ open class WKCookieWebView: WKWebView {
     // The closure where cookie information is called at update time
     @objc public var onUpdateCookieStorage: ((WKCookieWebView) -> Void)?
     
+    private lazy var httpCookieStorageQueue = DispatchQueue(label: "WKCookieWebView.HTTPCookieStorageQueue")
+    
     @objc
     public init(frame: CGRect, configurationBlock: ((WKWebViewConfiguration) -> Void)? = nil) {
         HTTPCookieStorage.shared.cookieAcceptPolicy = .always
@@ -58,6 +60,27 @@ open class WKCookieWebView: WKWebView {
         }
         
         return super.load(request)
+    }
+    
+    @available(iOS 11.0, *)
+    public func loadAfterInjectCookies(_ request: URLRequest) {
+        guard let url = request.url, let cookies = HTTPCookieStorage.shared.cookies(for: url), cookies.isEmpty == false else {
+            load(request)
+            return
+        }
+        
+        let dispatchGroup = DispatchGroup()
+        
+        HTTPCookieStorage.shared.cookies(for: url)?.forEach {
+            dispatchGroup.enter()
+            configuration.websiteDataStore.httpCookieStore.setCookie($0) {
+                dispatchGroup.leave()
+            }
+        }
+        
+        dispatchGroup.notify(queue: .main) { [weak self] in
+            self?.load(request)
+        }
     }
     
     // MARK: - Private
@@ -94,35 +117,34 @@ open class WKCookieWebView: WKWebView {
         
         return userContentController
     }
-
-    private func updateHigherOS11() {
+    
+    @available(iOS 11.0, *)
+    private func updateHigherOS11(_ cookieStore: WKHTTPCookieStore) {
         // WKWebView -> HTTPCookieStorage
-        guard #available(iOS 11.0, *) else {
-            return
-        }
-
         guard let url = url, let host = url.host else {
             return
         }
         
-        let httpCookies = HTTPCookieStorage.shared.cookies(for: url)
-        
-        configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] (cookies) in
-            cookies
-                .filter { host.range(of: $0.domain) != nil || $0.domain.range(of: host) != nil }
-                .filter { $0.expiresDate == nil || $0.expiresDate! >= Date() }
-                .forEach { wkCookie in
-                    if httpCookies?
-                        .filter({ $0.isEqualIdentifer(wkCookie) })
-                        .contains(where: { $0.hasLongerExpiresDate(then: wkCookie) }) ?? false {
-                        return
-                    }
-                    
-                    HTTPCookieStorage.shared.setCookie(wkCookie)
+        httpCookieStorageQueue.async {
+            let semaphore = DispatchSemaphore(value: 0)
+            let currentDate = Date()
+            
+            cookieStore.getAllCookies { cookies in
+                cookies
+                    .filter { host.range(of: $0.domain) != nil || $0.domain.range(of: host) != nil }
+                    .filter { $0.expiresDate == nil || $0.expiresDate! >= currentDate }
+                    .forEach { HTTPCookieStorage.shared.setCookie($0) }
+                
+                semaphore.signal()
+                
+                DispatchQueue.main.async { [weak self] in
+                    self.flatMap { $0.onUpdateCookieStorage?($0) }
                 }
-
-            self.flatMap { $0.onUpdateCookieStorage?($0) }
+            }
+            
+            semaphore.wait()
         }
+        
     }
     
     private func update(cookies: [HTTPCookie]?) {
@@ -234,6 +256,9 @@ extension WKCookieWebView: WKNavigationDelegate {
     
     public func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         wkNavigationDelegate?.webView?(webView, didCommit: navigation)
+        if #available(iOS 11.0, *) {
+            updateHigherOS11(configuration.websiteDataStore.httpCookieStore)
+        }
     }
     
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -277,10 +302,7 @@ extension WKCookieWebView: WKHTTPCookieStoreObserver {
     
     @available(iOS 11.0, *)
     public func cookiesDidChange(in cookieStore: WKHTTPCookieStore) {
-        // https://forums.developer.apple.com/thread/109994
-        DispatchQueue.main.async { [weak self] in
-            self?.updateHigherOS11()
-        }
+        updateHigherOS11(cookieStore)
     }
     
 }
