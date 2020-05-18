@@ -267,7 +267,10 @@ extension WKCookieWebView: WKHTTPCookieStoreObserver {
     
     @available(iOS 11.0, *)
     public func cookiesDidChange(in cookieStore: WKHTTPCookieStore) {
-        updateHigherOS11()
+        // https://forums.developer.apple.com/thread/109994
+        DispatchQueue.main.async { [weak self] in
+            self?.updateHigherOS11()
+        }
     }
     
 }
