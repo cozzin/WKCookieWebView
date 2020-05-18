@@ -104,21 +104,12 @@ open class WKCookieWebView: WKWebView {
         guard let url = url, let host = url.host else {
             return
         }
-
-        let httpCookies = HTTPCookieStorage.shared.cookies(for: url)
         
         configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] (cookies) in
-            let wkCookies = cookies
+            cookies
                 .filter { host.range(of: $0.domain) != nil || $0.domain.range(of: host) != nil }
                 .filter { $0.expiresDate == nil || $0.expiresDate! >= Date() }
-            
-            for wkCookie in wkCookies {
-                httpCookies?
-                    .filter { $0.name == wkCookie.name }
-                    .forEach { HTTPCookieStorage.shared.deleteCookie($0) }
-                
-                HTTPCookieStorage.shared.setCookie(wkCookie)
-            }
+                .forEach { HTTPCookieStorage.shared.setCookie($0) }
             
             self.flatMap { $0.onUpdateCookieStorage?($0) }
         }
