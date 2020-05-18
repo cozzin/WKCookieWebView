@@ -105,12 +105,22 @@ open class WKCookieWebView: WKWebView {
             return
         }
         
+        let httpCookies = HTTPCookieStorage.shared.cookies(for: url)
+        
         configuration.websiteDataStore.httpCookieStore.getAllCookies { [weak self] (cookies) in
             cookies
                 .filter { host.range(of: $0.domain) != nil || $0.domain.range(of: host) != nil }
                 .filter { $0.expiresDate == nil || $0.expiresDate! >= Date() }
-                .forEach { HTTPCookieStorage.shared.setCookie($0) }
-            
+                .forEach { wkCookie in
+                    if httpCookies?
+                        .filter({ $0.isEqualIdentifer(wkCookie) })
+                        .contains(where: { $0.hasLongerExpiresDate(then: wkCookie) }) ?? false {
+                        return
+                    }
+                    
+                    HTTPCookieStorage.shared.setCookie(wkCookie)
+                }
+
             self.flatMap { $0.onUpdateCookieStorage?($0) }
         }
     }
@@ -287,6 +297,24 @@ extension HTTPCookie {
                value == other.value &&
                domain == other.domain &&
                path == other.path
+    }
+    
+    func isEqualIdentifer(_ other: HTTPCookie) -> Bool {
+        return name == other.name &&
+            domain == other.domain &&
+            path == other.path
+    }
+    
+    func hasLongerExpiresDate(then other: HTTPCookie) -> Bool {
+        guard let expiresDate = expiresDate else {
+            return true
+        }
+        
+        guard let otherExpiresDate = other.expiresDate else {
+            return false
+        }
+        
+        return expiresDate >= otherExpiresDate
     }
     
 }
