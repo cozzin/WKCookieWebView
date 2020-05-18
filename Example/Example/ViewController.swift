@@ -23,17 +23,17 @@ class ViewController: UIViewController {
         super.viewDidLoad()
         // Do any additional setup after loading the view, typically from a nib.
         
-        let urlString = "http://github.com"
+        let urlString = "http://cozzin.github.io/Bakery/cookie"
         let isNeedPreloadForCookieSync = false
         
         let cookie = HTTPCookie(properties: [
-            .domain: "github.com",
+            .domain: ".cozzin.github.io",
             .path: "/",
-            .name: "[Test] Cookie",
+            .name: "key",
             .value: "value!!"])!
         
         HTTPCookieStorage.shared.setCookie(cookie)
-        
+                
         if isNeedPreloadForCookieSync {
             // After running the app, before the first webview was loaded,
             // Cookies may not be set properly,

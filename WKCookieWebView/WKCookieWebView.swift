@@ -41,6 +41,10 @@ open class WKCookieWebView: WKWebView {
         configurationBlock?(configuration)
         super.init(frame: frame, configuration: configuration)
         navigationDelegate = self
+        
+        if #available(iOS 11.0, *) {
+            configuration.websiteDataStore.httpCookieStore.add(self)
+        }
     }
     
     required public init?(coder: NSCoder) {
@@ -91,7 +95,7 @@ open class WKCookieWebView: WKWebView {
         return userContentController
     }
 
-    private func updateHigherOS11(webView: WKWebView) {
+    private func updateHigherOS11() {
         // WKWebView -> HTTPCookieStorage
         guard #available(iOS 11.0, *) else {
             return
@@ -228,7 +232,6 @@ extension WKCookieWebView: WKNavigationDelegate {
     }
     
     public func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
-        updateHigherOS11(webView: webView)
         wkNavigationDelegate?.webView?(webView, didCommit: navigation)
     }
     
@@ -263,6 +266,17 @@ extension WKCookieWebView: WKNavigationDelegate {
     @available(iOS 9.0, *)
     public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         wkNavigationDelegate?.webViewWebContentProcessDidTerminate?(webView)
+    }
+    
+}
+
+// MARK: - WKHTTPCookieStoreObserver
+
+extension WKCookieWebView: WKHTTPCookieStoreObserver {
+    
+    @available(iOS 11.0, *)
+    public func cookiesDidChange(in cookieStore: WKHTTPCookieStore) {
+        updateHigherOS11()
     }
     
 }
