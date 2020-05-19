@@ -56,6 +56,28 @@ open class WKCookieWebView: WKWebView {
         return super.load(request)
     }
     
+    @objc(loadAfterInjectCookiesWithRequest:)
+    @available(iOS 11.0, *)
+     public func loadAfterInjectCookies(_ request: URLRequest) {
+         guard let url = request.url, let cookies = HTTPCookieStorage.shared.cookies(for: url), cookies.isEmpty == false else {
+             load(request)
+             return
+         }
+         
+         let dispatchGroup = DispatchGroup()
+         
+         HTTPCookieStorage.shared.cookies(for: url)?.forEach {
+             dispatchGroup.enter()
+             configuration.websiteDataStore.httpCookieStore.setCookie($0) {
+                 dispatchGroup.leave()
+             }
+         }
+         
+         dispatchGroup.notify(queue: .main) { [weak self] in
+             self?.load(request)
+         }
+     }
+    
     // MARK: - Private
     private func userContentWithCookies(_ url: URL) -> WKUserContentController {
         let userContentController = configuration.userContentController

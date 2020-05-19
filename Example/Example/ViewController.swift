@@ -45,7 +45,11 @@ class ViewController: UIViewController {
             }
         } else {
             setupWebView()
-            webView.load(URLRequest(url: URL(string: urlString)!))
+            if #available(iOS 11.0, *) {
+                webView.loadAfterInjectCookies(URLRequest(url: URL(string: urlString)!))
+            } else {
+                webView.load(URLRequest(url: URL(string: urlString)!))
+            }
         }
     }
     
