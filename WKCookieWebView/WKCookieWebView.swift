@@ -62,6 +62,7 @@ open class WKCookieWebView: WKWebView {
         return super.load(request)
     }
     
+    @objc
     @available(iOS 11.0, *)
     public func loadAfterInjectCookies(_ request: URLRequest) {
         guard let url = request.url, let cookies = HTTPCookieStorage.shared.cookies(for: url), cookies.isEmpty == false else {
