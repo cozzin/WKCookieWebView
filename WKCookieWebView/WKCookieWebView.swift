@@ -33,8 +33,9 @@ open class WKCookieWebView: WKWebView {
     // The closure where cookie information is called at update time
     @objc public var onUpdateCookieStorage: ((WKCookieWebView) -> Void)?
     
-    private lazy var httpCookieStorageQueue = DispatchQueue(label: "WKCookieWebView.HTTPCookieStorageQueue")
-    
+    private let cookieStorageQueue = DispatchQueue(label: "WKCookieWebView.HTTPCookieStorageQueue")
+    private let cookieStorageSemaphore = DispatchSemaphore(value: 0)
+
     @objc
     public init(frame: CGRect, configurationBlock: ((WKWebViewConfiguration) -> Void)? = nil) {
         HTTPCookieStorage.shared.cookieAcceptPolicy = .always
@@ -126,24 +127,25 @@ open class WKCookieWebView: WKWebView {
             return
         }
         
-        httpCookieStorageQueue.async {
-            let semaphore = DispatchSemaphore(value: 0)
+        cookieStorageQueue.async { [weak self] in
             let currentDate = Date()
             
-            cookieStore.getAllCookies { cookies in
-                cookies
-                    .filter { host.range(of: $0.domain) != nil || $0.domain.range(of: host) != nil }
-                    .filter { $0.expiresDate == nil || $0.expiresDate! >= currentDate }
-                    .forEach { HTTPCookieStorage.shared.setCookie($0) }
-                
-                semaphore.signal()
-                
-                DispatchQueue.main.async { [weak self] in
-                    self.flatMap { $0.onUpdateCookieStorage?($0) }
+            DispatchQueue.main.async {
+                cookieStore.getAllCookies { cookies in
+                    cookies
+                        .filter { host.range(of: $0.domain) != nil || $0.domain.range(of: host) != nil }
+                        .filter { $0.expiresDate == nil || $0.expiresDate! >= currentDate }
+                        .forEach { HTTPCookieStorage.shared.setCookie($0) }
+                    
+                    DispatchQueue.main.async { [weak self] in
+                        self.flatMap { $0.onUpdateCookieStorage?($0) }
+                    }
+                    
+                    self?.cookieStorageSemaphore.signal()
                 }
             }
             
-            semaphore.wait()
+            self?.cookieStorageSemaphore.wait()
         }
         
     }
